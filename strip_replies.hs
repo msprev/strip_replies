@@ -1,52 +1,48 @@
 import Text.Regex.PCRE
+import Data.List
 
 main :: IO ()
 main = interact (unlines . stripQuoted . lines)
 
 -- | sequence of filters to tidy quoted messages
 stripQuoted :: [String] -> [String]
-stripQuoted = removeDoubles . tweakAttachments . removeSignature . removeQuoteAttrib . removeLevel2
+stripQuoted = removeDoubles . tweakAttachments . removeLine . removeAfterLine . removeLevel2
 
 -- | remove any line starting with more than one '>'
 removeLevel2 :: [String] -> [String]
-removeLevel2 = filter (\x -> take 2 x /= ">>")
+removeLevel2 = filter killRule
+    where killRule ('>':'>':_) = False
+          killRule _           = True
 
--- | remove attribution line for level 2 quote
-removeQuoteAttrib :: [String] -> [String]
-removeQuoteAttrib =  filterOutRegexList badstuff
-    where badstuff = [
-            "^>[[:space:]]*(From|Forwarded message|Begin forwarded message|Original Message|Reply message|Mensaje original)(:)?[[:space:]]+",
-            "^>[[:space:]]*On .* wrote:",
-            "^>[[:space:]]*Quoting .*? <" ]
+-- | remove lines after (and including) those that match badstuff
+removeAfterLine :: [String] -> [String]
+removeAfterLine =  takeWhile (\x -> not (any (x=~) badstuff))
+    where badstuff = [ "^>\\sFrom:\\s"
+                     , "^>\\s(-+)\\s?(:?Forwarded message|Original Message|Reply message|Mensaje original)\\s?\\1$" ]
 
--- | remove signature for quote at level 1
-removeSignature :: [String] -> [String]
-removeSignature =  filterOutRegexList badstuff
-    where badstuff = [
-            "^> -- $",
-            "^> --$",
-            "^> ___+$",
-            "^> Sent from my HTC$",
-            "^> Sent from my iPhone$",
-            "^> The University of Edinburgh is a charitable body, registered in$",
-            "^> Scotland, with registration number SC005336\\.$"]
-
--- | return only lines that don't match list of regexs (1st arg)
--- note: regexs are used first to last
-filterOutRegexList :: [String] -> [String] -> [String]
-filterOutRegexList = foldr (\x acc -> acc . filterOutRegex x) id
-
--- | return only lines that don't match regex (1st arg)
-filterOutRegex :: String -> [String] -> [String]
-filterOutRegex pat = filter (\x -> not (x =~ pat :: Bool)) 
+-- | remove lines that match badstuff
+removeLine :: [String] -> [String]
+removeLine =  filter (\x -> not (any (x=~) badstuff))
+    where badstuff = [ "^> On .* wrote:$" 
+                     , "^> Quoting .*? <"
+                     , "^> Begin forwarded message:$"
+                     , "^> --\\s?$"
+                     , "^> ___+$"
+                     , "^> Sent from my \\w+$"
+                     , "^> The University of Edinburgh is a charitable body, registered in$"
+                     , "^> Scotland, with registration number SC005336\\.$" ]
 
 -- | tweak attachment text from [x] to `[x]`
 tweakAttachments :: [String] -> [String]
-tweakAttachments = map (\x -> if take 3 x == "> [" && last x == ']' 
-                                then "> `[" ++ (drop 3 (init x)) ++ "]`" 
-                                else x)
+tweakAttachments = map rewriteRule
+    where rewriteRule x = if "> [" `isPrefixOf` x && "]" `isSuffixOf` x
+                          then "> `[" ++ drop 3 (init x) ++ "]`"
+                          else x
 
--- | remove double newlines in quoted message
--- also removes trailing newlines
+-- | remove double lines of ">" in quoted message
+-- | also removes trailing lines of ">" at end
 removeDoubles :: [String] -> [String]
-removeDoubles = foldr (\x acc -> if x == ">" && (acc == [] || head acc == ">") then acc else x:acc) []
+removeDoubles = foldr accRule []
+    where accRule ">" []           = []
+          accRule ">" (">":others) = others
+          accRule x acc            = x:acc
