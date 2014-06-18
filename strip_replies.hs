@@ -44,5 +44,5 @@ tweakAttachments = map rewriteRule
 removeDoubles :: [String] -> [String]
 removeDoubles = foldr accRule []
     where accRule ">" []           = []
-          accRule ">" (">":others) = others
+          accRule ">" (">":others) = ">":others
           accRule x acc            = x:acc
