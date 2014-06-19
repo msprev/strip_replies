@@ -18,7 +18,7 @@ removeLevel2 = filter killRule
 removeAfterLine :: [String] -> [String]
 removeAfterLine =  takeWhile (\x -> not (any (x=~) badstuff))
     where badstuff = [ "^>\\sFrom:\\s"
-                     , "^>\\s(-+)\\s?(:?Forwarded message|Original Message|Reply message|Mensaje original)\\s?\\1$" ]
+                     , "^>\\s(-+)\\s?(:?Forwarded message|Original Message|Original|Reply message|Mensaje original)\\s?\\1$" ]
 
 -- | remove lines that match badstuff
 removeLine :: [String] -> [String]
